@@ -1,0 +1,6 @@
+cd file_location
+git clone url_copied_from_github
+git add ".file format"
+git commit -a -m "commit_message"
+git push
+git pull
