@@ -79,13 +79,13 @@ def mmn_queueing_jsq(n,arrival_rate,service_rate,simulation_time=60,simuseed=mat
             mu = n*service_rate
         else:
             raise Exception("Unmatched cardinality for service rate and n")
-    elif isinstance(service_rate, int):
+    elif isinstance(service_rate, int) or isinstance(service_rate, float):
         if n == 1:
             mu = [service_rate]
         elif n > 1:
             mu = n*[service_rate]
     else:
-        raise Exception("Please use int or list type for service rate")
+        raise Exception("Please use int, float or list type for service rate")
     
     mu = np.array(mu)
 
@@ -463,13 +463,13 @@ def mmn_queueing_jsq_weibull(n,arrival_rate,scale,shape,simulation_time=60,simus
             scale = n*scale
         else:
             raise Exception("Unmatched cardinality for scale and n")
-    elif isinstance(scale, int):
+    elif isinstance(scale, int) or isinstance(scale, float):
         if n == 1:
             scale = [scale]
         elif n > 1:
             scale = n*[scale]
     else:
-        raise Exception("Please use int or list type for scale")
+        raise Exception("Please use int, float or list type for scale")
         
     if isinstance(shape, list):
         if len(shape) == n:
@@ -478,13 +478,13 @@ def mmn_queueing_jsq_weibull(n,arrival_rate,scale,shape,simulation_time=60,simus
             shape = n*shape
         else:
             raise Exception("Unmatched cardinality for shape and n")
-    elif isinstance(shape, int):
+    elif isinstance(shape, int) or isinstance(shape, float):
         if n == 1:
             shape = [shape]
         elif n > 1:
             shape = n*[shape]
     else:
-        raise Exception("Please use int or list type for shape")
+        raise Exception("Please use int, float or list type for shape")
     
     # Record the start/queue/finish timing for each arrival
     for i in range(1,n+1):
@@ -726,13 +726,13 @@ def mmn_queueing_redundancy_dos(n,d,arrival_rate,service_rate,simulation_time=60
             mu = n*service_rate
         else:
             raise Exception("Unmatched cardinality for service rate and n")
-    elif isinstance(service_rate, int):
+    elif isinstance(service_rate, int) or isinstance(service_rate, float):
         if n == 1:
             mu = [service_rate]
         elif n > 1:
             mu = n*[service_rate]
     else:
-        raise Exception("Please use int or list type for service rate")
+        raise Exception("Please use int, float or list type for service rate")
     
     # Simulating the Redundancy queues
     redun_server = np.zeros(n,dtype=int)
@@ -998,13 +998,13 @@ def mmn_queueing_redundancy_doc(n,d,arrival_rate,service_rate,simulation_time=60
             mu = n*service_rate
         else:
             raise Exception("Unmatched cardinality for service rate and n")
-    elif isinstance(service_rate, int):
+    elif isinstance(service_rate, int) or isinstance(service_rate, float):
         if n == 1:
             mu = [service_rate]
         elif n > 1:
             mu = n*[service_rate]
     else:
-        raise Exception("Please use int or list type for service rate")
+        raise Exception("Please use int, float or list type for service rate")
     
     # Simulating the Redundancy queues
     redun_server = np.zeros(n,dtype=int)
@@ -1294,13 +1294,13 @@ def mmn_queueing_redundancy_dos_identical(n,d,arrival_rate,service_rate,simulati
             mu = n*service_rate
         else:
             raise Exception("Unmatched cardinality for service rate and n")
-    elif isinstance(service_rate, int):
+    elif isinstance(service_rate, int) or isinstance(service_rate, float):
         if n == 1:
             mu = [service_rate]
         elif n > 1:
             mu = n*[service_rate]
     else:
-        raise Exception("Please use int or list type for service rate")
+        raise Exception("Please use int, float or list type for service rate")
     
     # Simulating the Redundancy queues
     redun_server = np.zeros(n,dtype=int)
@@ -1567,13 +1567,13 @@ def mmn_queueing_redundancy_doc_identical(n,d,arrival_rate,service_rate,simulati
             mu = n*service_rate
         else:
             raise Exception("Unmatched cardinality for service rate and n")
-    elif isinstance(service_rate, int):
+    elif isinstance(service_rate, int) or isinstance(service_rate, float):
         if n == 1:
             mu = [service_rate]
         elif n > 1:
             mu = n*[service_rate]
     else:
-        raise Exception("Please use int or list type for service rate")
+        raise Exception("Please use int, float or list type for service rate")
     
     # Simulating the Redundancy queues
     redun_server = np.zeros(n,dtype=int)
@@ -1865,13 +1865,13 @@ def mmn_queueing_redundancy_dos_weibull(n,d,arrival_rate,scale,shape,simulation_
             scale = n*scale
         else:
             raise Exception("Unmatched cardinality for scale and n")
-    elif isinstance(scale, int):
+    elif isinstance(scale, int) or isinstance(scale, float):
         if n == 1:
             scale = [scale]
         elif n > 1:
             scale = n*[scale]
     else:
-        raise Exception("Please use int or list type for scale")
+        raise Exception("Please use int, float or list type for scale")
         
     if isinstance(shape, list):
         if len(shape) == n:
@@ -1880,13 +1880,13 @@ def mmn_queueing_redundancy_dos_weibull(n,d,arrival_rate,scale,shape,simulation_
             shape = n*shape
         else:
             raise Exception("Unmatched cardinality for shape and n")
-    elif isinstance(shape, int):
+    elif isinstance(shape, int) or isinstance(shape, float):
         if n == 1:
             shape = [shape]
         elif n > 1:
             shape = n*[shape]
     else:
-        raise Exception("Please use int or list type for shape")
+        raise Exception("Please use int, float or list type for shape")
     
     # Simulating the Redundancy queues
     redun_server = np.zeros(n,dtype=int)
@@ -2153,13 +2153,13 @@ def mmn_queueing_redundancy_doc_weibull(n,d,arrival_rate,scale,shape,simulation_
             scale = n*scale
         else:
             raise Exception("Unmatched cardinality for scale and n")
-    elif isinstance(scale, int):
+    elif isinstance(scale, int) or isinstance(scale, float):
         if n == 1:
             scale = [scale]
         elif n > 1:
             scale = n*[scale]
     else:
-        raise Exception("Please use int or list type for scale")
+        raise Exception("Please use int, float or list type for scale")
         
     if isinstance(shape, list):
         if len(shape) == n:
@@ -2168,13 +2168,13 @@ def mmn_queueing_redundancy_doc_weibull(n,d,arrival_rate,scale,shape,simulation_
             shape = n*shape
         else:
             raise Exception("Unmatched cardinality for shape and n")
-    elif isinstance(shape, int):
+    elif isinstance(shape, int) or isinstance(shape, float):
         if n == 1:
             shape = [shape]
         elif n > 1:
             shape = n*[shape]
     else:
-        raise Exception("Please use int or list type for shape")
+        raise Exception("Please use int, float or list type for shape")
     
     # Simulating the Redundancy queues
     redun_server = np.zeros(n,dtype=int)
