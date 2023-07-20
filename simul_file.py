@@ -63,6 +63,7 @@ def mmn_queueing_jsq(n,arrival_rate,service_rate,simulation_time=60,simuseed=mat
         pass
     else:
         random.seed(simuseed)
+        np.random.seed(simuseed)
 
     if not type(n) is int:
         raise TypeError("n needs to be integer")
@@ -88,10 +89,6 @@ def mmn_queueing_jsq(n,arrival_rate,service_rate,simulation_time=60,simuseed=mat
     
     mu = np.array(mu)
 
-    
-    
-    
-    
     def jsq_policy(plc):
         if plc == "jsq1":
             #Join the shortest queue, if tied, choose randomly from the shortest queue (default)
@@ -162,7 +159,7 @@ def mmn_queueing_jsq(n,arrival_rate,service_rate,simulation_time=60,simuseed=mat
     total_col = np.arange(n)*4+6
     compare_col = np.insert(avail_col,0,[1,2])
     
-    event_calendar = np.zeros([2,3+4*n])
+    event_calendar = np.zeros([2,4+4*n])
     event_calendar[-1,1] = random.expovariate(lamb)
     event_calendar[-1,2] = simulation_time
     event_calendar[-1,avail_col] = math.nan
@@ -212,6 +209,8 @@ def mmn_queueing_jsq(n,arrival_rate,service_rate,simulation_time=60,simuseed=mat
             job_completion = eval(f'serverlog_{server_completion+1}')[0]
             no_completed_service[server_completion] += 1
             
+            event_calendar[-1,-1] += 1
+            
             del eval(f'serverlog_{server_completion+1}')[0]
             timing_table[job_completion,3] = event_calendar[-1,0]
             
@@ -235,7 +234,8 @@ def mmn_queueing_jsq(n,arrival_rate,service_rate,simulation_time=60,simuseed=mat
     event_calendar = pd.DataFrame(event_calendar).tail(-1)
     event_calendar.columns = ['Time','Next Customer','Finish Time'] + \
                     list(itertools.chain.from_iterable([[f"Server{i}", \
-                    f"Server{i} Available Time",f"Server{i} Queue",f"Server{i} Total"] for i in range(1,n+1)]))
+                    f"Server{i} Available Time",f"Server{i} Queue",f"Server{i} Total"] for i in range(1,n+1)])) +\
+                    ['Live_track']
     event_calendar["Grand Queue"] = event_calendar.iloc[:,queue_col].sum(axis=1)
     event_calendar["Grand Total"] = event_calendar.iloc[:,total_col].sum(axis=1)
     
@@ -320,6 +320,11 @@ def mmn_queueing_jsq(n,arrival_rate,service_rate,simulation_time=60,simuseed=mat
 
 
 
+
+
+
+
+
 def queue_length_time_graph(event_calendar,other_stat,gtype="queue",sq_no=math.nan):
     '''
     A function to plot the queue length time graph, provided with an event calendar
@@ -396,11 +401,269 @@ def queue_length_time_graph(event_calendar,other_stat,gtype="queue",sq_no=math.n
             plt.xlabel("Time")
             plt.ylabel("The number of servers")
 
+
+
+
+
+
+def mmn_queueing_jsq_weibull(n,arrival_rate,scale,shape,simulation_time=60,simuseed=math.nan):
+    '''
+    Simulating the mmn queueing system using the method of JSQ 
+    (namely join the shortest queue method), the user needs to provide
+    the number of servers (n),arrival rate (lambda) and scale/shape,
+    in case of n >= 2, if scale/shape is provided as a scaler, then all servers
+    share the same scale/shape, if scale/shape is provided as a vector, then all servers may have different scale/shape,
+    the simulation time is by default 60 units, and for reproducibility purposes, the user
+    can define simulation seed, by default the seed value is not set.
+    
+    There are 6 inputs in this function,
+    n:                the number of servers, a positive finite integer
+    arrival_rate:     exponential rate of arrival
+    scale:            weibull distribution scale
+    shape:            weibull distribution shape
+    simulation_time:  the simulation time, a positive finite number
+    simuseed:         the simulation seed number
+    
+    There are 8 outputs in this function,
+    event_calendar:   the event calendar for the whole simulation, containing all important
+                      information needed (current time, next customer arrival time, finish time,
+                      server occupancy variable, server next available time, server queue length,
+                      server total, grand queue length and grand total)
+    utiliz:           the utilization for each server
+    ans:              the average number in the system for each server and grand average
+    aql:              the average queue length for each server and grand average
+    awt:              the average waiting time for each customer and grand average
+    act:              the average cycle time for each customer and grand average
+    no_cust_arr_comp: the table illustrating the number of arrived customers and the
+                      the number of completed services for each server and grand total
+    other_stat:       return other calculated statistics, for plotting purposes
+    
+    Code writer: Yaozu Li
+    uoe S.No: 2298215
+    
+    '''
+
+    if math.isnan(simuseed) == True:
+        pass
+    else:
+        random.seed(simuseed)
+        np.random.seed(simuseed)
+
+    if not type(n) is int:
+        raise TypeError("n needs to be integer")
+    if n < 0:
+        raise Exception("n needs to be positive")
+    
+    lamb =  arrival_rate
+    
+    if isinstance(scale, list):
+        if len(scale) == n:
+            scale = scale
+        elif (n > 1 and len(scale) == 1):
+            scale = n*scale
+        else:
+            raise Exception("Unmatched cardinality for scale and n")
+    elif isinstance(scale, int):
+        if n == 1:
+            scale = [scale]
+        elif n > 1:
+            scale = n*[scale]
+    else:
+        raise Exception("Please use int or list type for scale")
+        
+    if isinstance(shape, list):
+        if len(shape) == n:
+            shape = shape
+        elif (n > 1 and len(shape) == 1):
+            shape = n*shape
+        else:
+            raise Exception("Unmatched cardinality for shape and n")
+    elif isinstance(shape, int):
+        if n == 1:
+            shape = [shape]
+        elif n > 1:
+            shape = n*[shape]
+    else:
+        raise Exception("Please use int or list type for shape")
+    
+    # Record the start/queue/finish timing for each arrival
+    for i in range(1,n+1):
+        exec(f'serverlog_{i} = []')
+    timing_table = np.zeros(5)
+    
+    # Simulating the event calendar
+    table_col = np.arange(n)*4+3
+    avail_col = np.arange(n)*4+4
+    queue_col = np.arange(n)*4+5
+    total_col = np.arange(n)*4+6
+    compare_col = np.insert(avail_col,0,[1,2])
+    
+    event_calendar = np.zeros([2,4+4*n])
+    event_calendar[-1,1] = random.expovariate(lamb)
+    event_calendar[-1,2] = simulation_time
+    event_calendar[-1,avail_col] = math.nan
+    
+    no_customers = np.zeros(n+1)  # keep track of the number customers
+    no_completed_service = np.zeros(n+1)   # keep track of the number of completed services
+    arrival_label = 0    # keep track on each arrival's label
+    
+    while event_calendar[-1,0] < simulation_time:
+        event_calendar = np.vstack([event_calendar,event_calendar[-1,:]])
+        event_calendar[-1,0] = min(event_calendar[-2,compare_col])
+        
+        # If the next event is an arrival
+        if event_calendar[-1,0] == event_calendar[-2,1]:
+            event_calendar[-1,1] = event_calendar[-1,0]+random.expovariate(lamb)
+            server_assignment = random.choice(np.where(event_calendar[-1,total_col] == \
+                                   min(event_calendar[-1,total_col]))[0])
+            no_customers[server_assignment] += 1
+            arrival_label += 1
             
+            eval(f'serverlog_{server_assignment+1}').append(arrival_label)
+            timing_table = np.vstack([timing_table,np.zeros(5)])
+            timing_table[-1,0] = arrival_label
+            timing_table[-1,1] = event_calendar[-1,0]
+            timing_table[-1,4] = server_assignment+1
             
+            # If the server is not occupied
+            if event_calendar[-1,table_col[server_assignment]] == 0:
+                event_calendar[-1,table_col[server_assignment]] += 1
+                event_calendar[-1,avail_col[server_assignment]] = event_calendar[-1,0] + \
+                                                        scale[server_assignment]*np.random.weibull(shape[server_assignment])
+                event_calendar[-1,total_col[server_assignment]] += 1
+                
+                timing_table[-1,2] = event_calendar[-1,0]
             
+            # Else if the server is occupied
+            elif event_calendar[-1,table_col[server_assignment]] == 1:
+                event_calendar[-1,queue_col[server_assignment]] += 1
+                event_calendar[-1,total_col[server_assignment]] += 1
             
+        # Else if the next event is the simulation termination
+        elif event_calendar[-1,0] == simulation_time:
+            pass
+        
+        # Else if the next event is a service completion
+        else:
+            server_completion = np.where(event_calendar[-2,avail_col] == event_calendar[-1,0])[0][0]
+            job_completion = eval(f'serverlog_{server_completion+1}')[0]
+            no_completed_service[server_completion] += 1
             
+            event_calendar[-1,-1] += 1
+            
+            del eval(f'serverlog_{server_completion+1}')[0]
+            timing_table[job_completion,3] = event_calendar[-1,0]
+            
+            # If there is no queue behind
+            if event_calendar[-1,queue_col[server_completion]] == 0:
+                event_calendar[-1,table_col[server_completion]] -= 1
+                event_calendar[-1,avail_col[server_completion]] = math.nan
+                event_calendar[-1,total_col[server_completion]] -= 1
+            
+            # Else if there is a queue behind
+            elif event_calendar[-1,queue_col[server_completion]] > 0:
+                event_calendar[-1,avail_col[server_completion]] = event_calendar[-1,0] + \
+                                                        scale[server_completion]*np.random.weibull(shape[server_completion])
+                event_calendar[-1,queue_col[server_completion]] -= 1
+                event_calendar[-1,total_col[server_completion]] -= 1
+                
+                timing_table[eval(f'serverlog_{server_completion+1}')[0],2] = event_calendar[-1,0]
+    
+    no_customers[-1] = sum(no_customers[:-1])
+    no_completed_service[-1] = sum(no_completed_service[:-1])
+    event_calendar = pd.DataFrame(event_calendar).tail(-1)
+    event_calendar.columns = ['Time','Next Customer','Finish Time'] + \
+                    list(itertools.chain.from_iterable([[f"Server{i}", \
+                    f"Server{i} Available Time",f"Server{i} Queue",f"Server{i} Total"] for i in range(1,n+1)])) + \
+                    ['Live_track']
+    event_calendar["Grand Queue"] = event_calendar.iloc[:,queue_col].sum(axis=1)
+    event_calendar["Grand Total"] = event_calendar.iloc[:,total_col].sum(axis=1)
+    
+    timing_table = pd.DataFrame(timing_table)
+    timing_table.columns = ['Arrival_label','Start','Queue','Finish','Server']
+    timing_table = timing_table[timing_table['Finish'] != 0]
+    
+    # Concluding performance measures
+    # Time dynamic
+    time1 = event_calendar.iloc[:-1,0].to_numpy()
+    time2 = event_calendar.iloc[1:,0].to_numpy()
+    time3 = time2 - time1
+    
+    # Calculate the utilization for each server
+    utiliz_server = event_calendar.iloc[:-1,table_col].to_numpy()
+    utiliz_data = ((time3 @ utiliz_server)/simulation_time).round(3)
+    utiliz = pd.DataFrame(utiliz_data).transpose()
+    utiliz.columns = [f"Server{i} Utilization" for i in range(1,n+1)]
+    
+    # Calculating the average number in the systems for each server and grand total
+    ans_server = event_calendar.iloc[:-1,np.append(total_col,event_calendar.shape[1]-1)].to_numpy()
+    ans_data = ((time3 @ ans_server)/simulation_time).round(3)
+    ans = pd.DataFrame(ans_data).transpose()
+    ans.columns = [f"Server{i} Average number in the system" for i in range(1,n+1)]+["Grand Average number in the system"]
+    
+    # Calculating the average queue length
+    aql_server = event_calendar.iloc[:-1,np.append(queue_col,event_calendar.shape[1]-2)].to_numpy()
+    aql_data = ((time3 @ aql_server)/simulation_time).round(3)
+    aql = pd.DataFrame(aql_data).transpose()
+    aql.columns = [f"Server{i} Average queue length" for i in range(1,n+1)]+["Grand Average queue length"]
+    
+    # Average waiting time
+    awt_data = np.array([])
+    for i in range(1,n+1):
+        awt_table = timing_table[timing_table['Server']==i]
+        if awt_table.shape[0] != 0:
+            awt_data = np.append(awt_data,stat.mean(awt_table['Queue']-awt_table['Start']))
+        else:
+            awt_data = np.append(awt_data,0)
+    awt_data = np.append(awt_data,stat.mean(timing_table['Queue']-timing_table['Start']))
+    awt = pd.DataFrame(awt_data.round(3)).transpose()
+    awt.columns = [f"Server{i} Average waiting time" for i in range(1,n+1)]+["Grand Average waiting time"]
+    
+    # Average cycle time
+    act_data = np.array([])
+    for i in range(1,n+1):
+        act_table = timing_table[timing_table['Server']==i]
+        if act_table.shape[0] != 0:
+            act_data = np.append(act_data,stat.mean(act_table['Finish']-act_table['Start']))
+        else:
+            act_data = np.append(act_data,0)
+    act_data = np.append(act_data,stat.mean(timing_table['Finish']-timing_table['Start']))
+    act = pd.DataFrame(act_data.round(3)).transpose()
+    act.columns = [f"Server{i} Average cycle time" for i in range(1,n+1)]+["Grand Average cycle time"]
+
+    # Show the number of customers arrived and completed
+    no_cust_arr_comp = pd.DataFrame(np.vstack([no_customers,no_completed_service]))
+    no_cust_arr_comp.columns = [f"Server{i}" for i in range(1,n+1)]+["Grand total"]
+    no_cust_arr_comp.index = ["Arrived customers", "Completed services"]
+    
+    # Find the maximum queue length
+    mql = event_calendar.iloc[:,queue_col].max()
+    
+    # For other statistics
+    other_stat = {
+        "n": n,
+        "lamb": lamb,
+        "scale": scale,
+        "shape": shape,
+        "simulation_time": simulation_time,
+        "table_col": table_col,
+        "avail_col": avail_col,
+        "queue_col": queue_col,
+        "total_col": total_col,
+        "compare_col": compare_col,
+        "time3": time3,
+        "mql": mql
+    }
+    
+    # Return the event calendar and all performance measures table
+    return event_calendar, utiliz, ans, aql, awt, act, no_cust_arr_comp, other_stat
+
+
+
+
+
+
+
 def mmn_queueing_redundancy_dos(n,d,arrival_rate,service_rate,simulation_time=60,simuseed=math.nan):
     '''
     Simulating the mmn queueing system using the redundancy method, the user needs to provide
@@ -487,7 +750,7 @@ def mmn_queueing_redundancy_dos(n,d,arrival_rate,service_rate,simulation_time=60
     total_col = np.arange(n)*4+6
     compare_col = np.insert(avail_col,0,[1,2])
     
-    event_calendar = np.zeros([2,3+4*n])
+    event_calendar = np.zeros([2,4+4*n])
     event_calendar[-1,1] = random.expovariate(lamb)
     event_calendar[-1,2] = simulation_time
     event_calendar[-1,avail_col] = math.nan
@@ -554,6 +817,7 @@ def mmn_queueing_redundancy_dos(n,d,arrival_rate,service_rate,simulation_time=60
         else:
             server_completion = np.where(event_calendar[-2,avail_col] == event_calendar[-1,0])[0][0]
             no_completed_service[server_completion] += 1
+            event_calendar[-1,-1] += 1
             
             timing_table[redun_server[server_completion],3] = event_calendar[-1,0]
             
@@ -584,7 +848,8 @@ def mmn_queueing_redundancy_dos(n,d,arrival_rate,service_rate,simulation_time=60
     event_calendar = pd.DataFrame(event_calendar).tail(-1)
     event_calendar.columns = ['Time','Next Customer','Finish Time'] + \
                     list(itertools.chain.from_iterable([[f"Server{i}", \
-                    f"Server{i} Available Time",f"Server{i} Queue",f"Server{i} Total"] for i in range(1,n+1)]))
+                    f"Server{i} Available Time",f"Server{i} Queue",f"Server{i} Total"] for i in range(1,n+1)])) + \
+                    ['Live_track']
     event_calendar["Grand Queue"] = event_calendar.iloc[:,queue_col].sum(axis=1)
     event_calendar["Grand Total"] = event_calendar.iloc[:,total_col].sum(axis=1)
     
@@ -665,6 +930,8 @@ def mmn_queueing_redundancy_dos(n,d,arrival_rate,service_rate,simulation_time=60
     
     # Return the event calendar and all performance measures table
     return event_calendar, utiliz, ans, aql, awt, act, no_cust_arr_comp, other_stat
+
+
 
 
 
@@ -756,7 +1023,7 @@ def mmn_queueing_redundancy_doc(n,d,arrival_rate,service_rate,simulation_time=60
     total_col = np.arange(n)*4+6
     compare_col = np.insert(avail_col,0,[1,2])
     
-    event_calendar = np.zeros([2,3+4*n])
+    event_calendar = np.zeros([2,4+4*n])
     event_calendar[-1,1] = random.expovariate(lamb)
     event_calendar[-1,2] = simulation_time
     event_calendar[-1,avail_col] = math.nan
@@ -810,6 +1077,7 @@ def mmn_queueing_redundancy_doc(n,d,arrival_rate,service_rate,simulation_time=60
             server_completion = np.where(event_calendar[-2,avail_col] == event_calendar[-1,0])[0][0]
             no_completed_service[server_completion] += 1
             job_completion = redun_server[server_completion]
+            event_calendar[-1,-1] += 1
             
             timing_table[job_completion,2] = queue_record[job_completion,server_completion]
             timing_table[job_completion,3] = event_calendar[-1,0]
@@ -877,7 +1145,8 @@ def mmn_queueing_redundancy_doc(n,d,arrival_rate,service_rate,simulation_time=60
     event_calendar = pd.DataFrame(event_calendar).tail(-1)
     event_calendar.columns = ['Time','Next Customer','Finish Time'] + \
                     list(itertools.chain.from_iterable([[f"Server{i}", \
-                    f"Server{i} Available Time",f"Server{i} Queue",f"Server{i} Total"] for i in range(1,n+1)]))
+                    f"Server{i} Available Time",f"Server{i} Queue",f"Server{i} Total"] for i in range(1,n+1)])) + \
+                    ['Live_track']
     event_calendar["Grand Queue"] = event_calendar.iloc[:,queue_col].sum(axis=1)
     event_calendar["Grand Total"] = event_calendar.iloc[:,total_col].sum(axis=1)
     
@@ -958,6 +1227,7 @@ def mmn_queueing_redundancy_doc(n,d,arrival_rate,service_rate,simulation_time=60
     
     # Return the event calendar and all performance measures table
     return event_calendar, utiliz, ans, aql, awt, act, no_cust_arr_comp, other_stat
+
 
 
 
@@ -1048,7 +1318,7 @@ def mmn_queueing_redundancy_dos_identical(n,d,arrival_rate,service_rate,simulati
     total_col = np.arange(n)*4+6
     compare_col = np.insert(avail_col,0,[1,2])
     
-    event_calendar = np.zeros([2,3+4*n])
+    event_calendar = np.zeros([2,4+4*n])
     event_calendar[-1,1] = random.expovariate(lamb)
     event_calendar[-1,2] = simulation_time
     event_calendar[-1,avail_col] = math.nan
@@ -1116,6 +1386,7 @@ def mmn_queueing_redundancy_dos_identical(n,d,arrival_rate,service_rate,simulati
         else:
             server_completion = np.where(event_calendar[-2,avail_col] == event_calendar[-1,0])[0][0]
             no_completed_service[server_completion] += 1
+            event_calendar[-1,-1] += 1
             
             timing_table[redun_server[server_completion],3] = event_calendar[-1,0]
             
@@ -1146,7 +1417,8 @@ def mmn_queueing_redundancy_dos_identical(n,d,arrival_rate,service_rate,simulati
     event_calendar = pd.DataFrame(event_calendar).tail(-1)
     event_calendar.columns = ['Time','Next Customer','Finish Time'] + \
                     list(itertools.chain.from_iterable([[f"Server{i}", \
-                    f"Server{i} Available Time",f"Server{i} Queue",f"Server{i} Total"] for i in range(1,n+1)]))
+                    f"Server{i} Available Time",f"Server{i} Queue",f"Server{i} Total"] for i in range(1,n+1)])) + \
+                    ['Live_track']
     event_calendar["Grand Queue"] = event_calendar.iloc[:,queue_col].sum(axis=1)
     event_calendar["Grand Total"] = event_calendar.iloc[:,total_col].sum(axis=1)
     
@@ -1227,6 +1499,9 @@ def mmn_queueing_redundancy_dos_identical(n,d,arrival_rate,service_rate,simulati
     
     # Return the event calendar and all performance measures table
     return event_calendar, utiliz, ans, aql, awt, act, no_cust_arr_comp, other_stat
+
+
+
 
 
 
@@ -1317,7 +1592,7 @@ def mmn_queueing_redundancy_doc_identical(n,d,arrival_rate,service_rate,simulati
     total_col = np.arange(n)*4+6
     compare_col = np.insert(avail_col,0,[1,2])
     
-    event_calendar = np.zeros([2,3+4*n])
+    event_calendar = np.zeros([2,4+4*n])
     event_calendar[-1,1] = random.expovariate(lamb)
     event_calendar[-1,2] = simulation_time
     event_calendar[-1,avail_col] = math.nan
@@ -1372,6 +1647,7 @@ def mmn_queueing_redundancy_doc_identical(n,d,arrival_rate,service_rate,simulati
             server_completion = np.where(event_calendar[-2,avail_col] == event_calendar[-1,0])[0][0]
             no_completed_service[server_completion] += 1
             job_completion = redun_server[server_completion]
+            event_calendar[-1,-1] += 1
             
             timing_table[job_completion,2] = queue_record[job_completion,server_completion]
             timing_table[job_completion,3] = event_calendar[-1,0]
@@ -1439,7 +1715,8 @@ def mmn_queueing_redundancy_doc_identical(n,d,arrival_rate,service_rate,simulati
     event_calendar = pd.DataFrame(event_calendar).tail(-1)
     event_calendar.columns = ['Time','Next Customer','Finish Time'] + \
                     list(itertools.chain.from_iterable([[f"Server{i}", \
-                    f"Server{i} Available Time",f"Server{i} Queue",f"Server{i} Total"] for i in range(1,n+1)]))
+                    f"Server{i} Available Time",f"Server{i} Queue",f"Server{i} Total"] for i in range(1,n+1)])) + \
+                    ['Live_track']
     event_calendar["Grand Queue"] = event_calendar.iloc[:,queue_col].sum(axis=1)
     event_calendar["Grand Total"] = event_calendar.iloc[:,total_col].sum(axis=1)
     
@@ -1520,6 +1797,7 @@ def mmn_queueing_redundancy_doc_identical(n,d,arrival_rate,service_rate,simulati
     
     # Return the event calendar and all performance measures table
     return event_calendar, utiliz, ans, aql, awt, act, no_cust_arr_comp, other_stat
+
 
 
 
@@ -1626,7 +1904,7 @@ def mmn_queueing_redundancy_dos_weibull(n,d,arrival_rate,scale,shape,simulation_
     total_col = np.arange(n)*4+6
     compare_col = np.insert(avail_col,0,[1,2])
     
-    event_calendar = np.zeros([2,3+4*n])
+    event_calendar = np.zeros([2,4+4*n])
     event_calendar[-1,1] = random.expovariate(lamb)
     event_calendar[-1,2] = simulation_time
     event_calendar[-1,avail_col] = math.nan
@@ -1694,6 +1972,7 @@ def mmn_queueing_redundancy_dos_weibull(n,d,arrival_rate,scale,shape,simulation_
         else:
             server_completion = np.where(event_calendar[-2,avail_col] == event_calendar[-1,0])[0][0]
             no_completed_service[server_completion] += 1
+            event_calendar[-1,-1] += 1
             
             timing_table[redun_server[server_completion],3] = event_calendar[-1,0]
             
@@ -1724,7 +2003,8 @@ def mmn_queueing_redundancy_dos_weibull(n,d,arrival_rate,scale,shape,simulation_
     event_calendar = pd.DataFrame(event_calendar).tail(-1)
     event_calendar.columns = ['Time','Next Customer','Finish Time'] + \
                     list(itertools.chain.from_iterable([[f"Server{i}", \
-                    f"Server{i} Available Time",f"Server{i} Queue",f"Server{i} Total"] for i in range(1,n+1)]))
+                    f"Server{i} Available Time",f"Server{i} Queue",f"Server{i} Total"] for i in range(1,n+1)])) + \
+                    ['Live_track']
     event_calendar["Grand Queue"] = event_calendar.iloc[:,queue_col].sum(axis=1)
     event_calendar["Grand Total"] = event_calendar.iloc[:,total_col].sum(axis=1)
     
@@ -1806,6 +2086,7 @@ def mmn_queueing_redundancy_dos_weibull(n,d,arrival_rate,scale,shape,simulation_
     
     # Return the event calendar and all performance measures table
     return event_calendar, utiliz, ans, aql, awt, act, no_cust_arr_comp, other_stat
+
 
 
 
@@ -1912,7 +2193,7 @@ def mmn_queueing_redundancy_doc_weibull(n,d,arrival_rate,scale,shape,simulation_
     total_col = np.arange(n)*4+6
     compare_col = np.insert(avail_col,0,[1,2])
     
-    event_calendar = np.zeros([2,3+4*n])
+    event_calendar = np.zeros([2,4+4*n])
     event_calendar[-1,1] = random.expovariate(lamb)
     event_calendar[-1,2] = simulation_time
     event_calendar[-1,avail_col] = math.nan
@@ -1967,6 +2248,7 @@ def mmn_queueing_redundancy_doc_weibull(n,d,arrival_rate,scale,shape,simulation_
             server_completion = np.where(event_calendar[-2,avail_col] == event_calendar[-1,0])[0][0]
             no_completed_service[server_completion] += 1
             job_completion = redun_server[server_completion]
+            event_calendar[-1,-1] += 1
             
             timing_table[job_completion,2] = queue_record[job_completion,server_completion]
             timing_table[job_completion,3] = event_calendar[-1,0]
@@ -2034,7 +2316,8 @@ def mmn_queueing_redundancy_doc_weibull(n,d,arrival_rate,scale,shape,simulation_
     event_calendar = pd.DataFrame(event_calendar).tail(-1)
     event_calendar.columns = ['Time','Next Customer','Finish Time'] + \
                     list(itertools.chain.from_iterable([[f"Server{i}", \
-                    f"Server{i} Available Time",f"Server{i} Queue",f"Server{i} Total"] for i in range(1,n+1)]))
+                    f"Server{i} Available Time",f"Server{i} Queue",f"Server{i} Total"] for i in range(1,n+1)])) + \
+                    ['Live_track']
     event_calendar["Grand Queue"] = event_calendar.iloc[:,queue_col].sum(axis=1)
     event_calendar["Grand Total"] = event_calendar.iloc[:,total_col].sum(axis=1)
     
@@ -2120,250 +2403,8 @@ def mmn_queueing_redundancy_doc_weibull(n,d,arrival_rate,scale,shape,simulation_
 
 
 
-def mmn_queueing_jsq_weibull(n,arrival_rate,scale,shape,simulation_time=60,simuseed=math.nan):
-    '''
-    Simulating the mmn queueing system using the method of JSQ 
-    (namely join the shortest queue method), the user needs to provide
-    the number of servers (n),arrival rate (lambda) and scale/shape,
-    in case of n >= 2, if scale/shape is provided as a scaler, then all servers
-    share the same scale/shape, if scale/shape is provided as a vector, then all servers may have different scale/shape,
-    the simulation time is by default 60 units, and for reproducibility purposes, the user
-    can define simulation seed, by default the seed value is not set.
-    
-    There are 6 inputs in this function,
-    n:                the number of servers, a positive finite integer
-    arrival_rate:     exponential rate of arrival
-    scale:            weibull distribution scale
-    shape:            weibull distribution shape
-    simulation_time:  the simulation time, a positive finite number
-    simuseed:         the simulation seed number
-    
-    There are 8 outputs in this function,
-    event_calendar:   the event calendar for the whole simulation, containing all important
-                      information needed (current time, next customer arrival time, finish time,
-                      server occupancy variable, server next available time, server queue length,
-                      server total, grand queue length and grand total)
-    utiliz:           the utilization for each server
-    ans:              the average number in the system for each server and grand average
-    aql:              the average queue length for each server and grand average
-    awt:              the average waiting time for each customer and grand average
-    act:              the average cycle time for each customer and grand average
-    no_cust_arr_comp: the table illustrating the number of arrived customers and the
-                      the number of completed services for each server and grand total
-    other_stat:       return other calculated statistics, for plotting purposes
-    
-    Code writer: Yaozu Li
-    uoe S.No: 2298215
-    
-    '''
 
-    if math.isnan(simuseed) == True:
-        pass
-    else:
-        random.seed(simuseed)
 
-    if not type(n) is int:
-        raise TypeError("n needs to be integer")
-    if n < 0:
-        raise Exception("n needs to be positive")
-    
-    lamb =  arrival_rate
-    
-    if isinstance(scale, list):
-        if len(scale) == n:
-            scale = scale
-        elif (n > 1 and len(scale) == 1):
-            scale = n*scale
-        else:
-            raise Exception("Unmatched cardinality for scale and n")
-    elif isinstance(scale, int):
-        if n == 1:
-            scale = [scale]
-        elif n > 1:
-            scale = n*[scale]
-    else:
-        raise Exception("Please use int or list type for scale")
-        
-    if isinstance(shape, list):
-        if len(shape) == n:
-            shape = shape
-        elif (n > 1 and len(shape) == 1):
-            shape = n*shape
-        else:
-            raise Exception("Unmatched cardinality for shape and n")
-    elif isinstance(shape, int):
-        if n == 1:
-            shape = [shape]
-        elif n > 1:
-            shape = n*[shape]
-    else:
-        raise Exception("Please use int or list type for shape")
-    
-    # Record the start/queue/finish timing for each arrival
-    for i in range(1,n+1):
-        exec(f'serverlog_{i} = []')
-    timing_table = np.zeros(5)
-    
-    # Simulating the event calendar
-    table_col = np.arange(n)*4+3
-    avail_col = np.arange(n)*4+4
-    queue_col = np.arange(n)*4+5
-    total_col = np.arange(n)*4+6
-    compare_col = np.insert(avail_col,0,[1,2])
-    
-    event_calendar = np.zeros([2,3+4*n])
-    event_calendar[-1,1] = random.expovariate(lamb)
-    event_calendar[-1,2] = simulation_time
-    event_calendar[-1,avail_col] = math.nan
-    
-    no_customers = np.zeros(n+1)  # keep track of the number customers
-    no_completed_service = np.zeros(n+1)   # keep track of the number of completed services
-    arrival_label = 0    # keep track on each arrival's label
-    
-    while event_calendar[-1,0] < simulation_time:
-        event_calendar = np.vstack([event_calendar,event_calendar[-1,:]])
-        event_calendar[-1,0] = min(event_calendar[-2,compare_col])
-        
-        # If the next event is an arrival
-        if event_calendar[-1,0] == event_calendar[-2,1]:
-            event_calendar[-1,1] = event_calendar[-1,0]+random.expovariate(lamb)
-            server_assignment = random.choice(np.where(event_calendar[-1,total_col] == \
-                                   min(event_calendar[-1,total_col]))[0])
-            no_customers[server_assignment] += 1
-            arrival_label += 1
-            
-            eval(f'serverlog_{server_assignment+1}').append(arrival_label)
-            timing_table = np.vstack([timing_table,np.zeros(5)])
-            timing_table[-1,0] = arrival_label
-            timing_table[-1,1] = event_calendar[-1,0]
-            timing_table[-1,4] = server_assignment+1
-            
-            # If the server is not occupied
-            if event_calendar[-1,table_col[server_assignment]] == 0:
-                event_calendar[-1,table_col[server_assignment]] += 1
-                event_calendar[-1,avail_col[server_assignment]] = event_calendar[-1,0] + \
-                                                        scale[server_assignment]*np.random.weibull(shape[server_assignment])
-                event_calendar[-1,total_col[server_assignment]] += 1
-                
-                timing_table[-1,2] = event_calendar[-1,0]
-            
-            # Else if the server is occupied
-            elif event_calendar[-1,table_col[server_assignment]] == 1:
-                event_calendar[-1,queue_col[server_assignment]] += 1
-                event_calendar[-1,total_col[server_assignment]] += 1
-            
-        # Else if the next event is the simulation termination
-        elif event_calendar[-1,0] == simulation_time:
-            pass
-        
-        # Else if the next event is a service completion
-        else:
-            server_completion = np.where(event_calendar[-2,avail_col] == event_calendar[-1,0])[0][0]
-            job_completion = eval(f'serverlog_{server_completion+1}')[0]
-            no_completed_service[server_completion] += 1
-            
-            del eval(f'serverlog_{server_completion+1}')[0]
-            timing_table[job_completion,3] = event_calendar[-1,0]
-            
-            # If there is no queue behind
-            if event_calendar[-1,queue_col[server_completion]] == 0:
-                event_calendar[-1,table_col[server_completion]] -= 1
-                event_calendar[-1,avail_col[server_completion]] = math.nan
-                event_calendar[-1,total_col[server_completion]] -= 1
-            
-            # Else if there is a queue behind
-            elif event_calendar[-1,queue_col[server_completion]] > 0:
-                event_calendar[-1,avail_col[server_completion]] = event_calendar[-1,0] + \
-                                                        scale[server_completion]*np.random.weibull(shape[server_completion])
-                event_calendar[-1,queue_col[server_completion]] -= 1
-                event_calendar[-1,total_col[server_completion]] -= 1
-                
-                timing_table[eval(f'serverlog_{server_completion+1}')[0],2] = event_calendar[-1,0]
-    
-    no_customers[-1] = sum(no_customers[:-1])
-    no_completed_service[-1] = sum(no_completed_service[:-1])
-    event_calendar = pd.DataFrame(event_calendar).tail(-1)
-    event_calendar.columns = ['Time','Next Customer','Finish Time'] + \
-                    list(itertools.chain.from_iterable([[f"Server{i}", \
-                    f"Server{i} Available Time",f"Server{i} Queue",f"Server{i} Total"] for i in range(1,n+1)]))
-    event_calendar["Grand Queue"] = event_calendar.iloc[:,queue_col].sum(axis=1)
-    event_calendar["Grand Total"] = event_calendar.iloc[:,total_col].sum(axis=1)
-    
-    timing_table = pd.DataFrame(timing_table)
-    timing_table.columns = ['Arrival_label','Start','Queue','Finish','Server']
-    timing_table = timing_table[timing_table['Finish'] != 0]
-    
-    # Concluding performance measures
-    # Time dynamic
-    time1 = event_calendar.iloc[:-1,0].to_numpy()
-    time2 = event_calendar.iloc[1:,0].to_numpy()
-    time3 = time2 - time1
-    
-    # Calculate the utilization for each server
-    utiliz_server = event_calendar.iloc[:-1,table_col].to_numpy()
-    utiliz_data = ((time3 @ utiliz_server)/simulation_time).round(3)
-    utiliz = pd.DataFrame(utiliz_data).transpose()
-    utiliz.columns = [f"Server{i} Utilization" for i in range(1,n+1)]
-    
-    # Calculating the average number in the systems for each server and grand total
-    ans_server = event_calendar.iloc[:-1,np.append(total_col,event_calendar.shape[1]-1)].to_numpy()
-    ans_data = ((time3 @ ans_server)/simulation_time).round(3)
-    ans = pd.DataFrame(ans_data).transpose()
-    ans.columns = [f"Server{i} Average number in the system" for i in range(1,n+1)]+["Grand Average number in the system"]
-    
-    # Calculating the average queue length
-    aql_server = event_calendar.iloc[:-1,np.append(queue_col,event_calendar.shape[1]-2)].to_numpy()
-    aql_data = ((time3 @ aql_server)/simulation_time).round(3)
-    aql = pd.DataFrame(aql_data).transpose()
-    aql.columns = [f"Server{i} Average queue length" for i in range(1,n+1)]+["Grand Average queue length"]
-    
-    # Average waiting time
-    awt_data = np.array([])
-    for i in range(1,n+1):
-        awt_table = timing_table[timing_table['Server']==i]
-        if awt_table.shape[0] != 0:
-            awt_data = np.append(awt_data,stat.mean(awt_table['Queue']-awt_table['Start']))
-        else:
-            awt_data = np.append(awt_data,0)
-    awt_data = np.append(awt_data,stat.mean(timing_table['Queue']-timing_table['Start']))
-    awt = pd.DataFrame(awt_data.round(3)).transpose()
-    awt.columns = [f"Server{i} Average waiting time" for i in range(1,n+1)]+["Grand Average waiting time"]
-    
-    # Average cycle time
-    act_data = np.array([])
-    for i in range(1,n+1):
-        act_table = timing_table[timing_table['Server']==i]
-        if act_table.shape[0] != 0:
-            act_data = np.append(act_data,stat.mean(act_table['Finish']-act_table['Start']))
-        else:
-            act_data = np.append(act_data,0)
-    act_data = np.append(act_data,stat.mean(timing_table['Finish']-timing_table['Start']))
-    act = pd.DataFrame(act_data.round(3)).transpose()
-    act.columns = [f"Server{i} Average cycle time" for i in range(1,n+1)]+["Grand Average cycle time"]
 
-    # Show the number of customers arrived and completed
-    no_cust_arr_comp = pd.DataFrame(np.vstack([no_customers,no_completed_service]))
-    no_cust_arr_comp.columns = [f"Server{i}" for i in range(1,n+1)]+["Grand total"]
-    no_cust_arr_comp.index = ["Arrived customers", "Completed services"]
-    
-    # Find the maximum queue length
-    mql = event_calendar.iloc[:,queue_col].max()
-    
-    # For other statistics
-    other_stat = {
-        "n": n,
-        "lamb": lamb,
-        "scale": scale,
-        "shape": shape,
-        "simulation_time": simulation_time,
-        "table_col": table_col,
-        "avail_col": avail_col,
-        "queue_col": queue_col,
-        "total_col": total_col,
-        "compare_col": compare_col,
-        "time3": time3,
-        "mql": mql
-    }
-    
-    # Return the event calendar and all performance measures table
-    return event_calendar, utiliz, ans, aql, awt, act, no_cust_arr_comp, other_stat
+
+
