@@ -6,6 +6,7 @@ import statistics as stat
 import matplotlib.pyplot as plt
 import itertools
 import warnings
+import bisect
 import os
 
 
@@ -315,7 +316,7 @@ def mmn_queueing_jsq(n,arrival_rate,service_rate,simulation_time=60,simuseed=mat
     }
     
     # Return the event calendar and all performance measures table
-    return event_calendar, utiliz, ans, aql, awt, act, no_cust_arr_comp, other_stat
+    return event_calendar, utiliz, ans, aql, awt, act, no_cust_arr_comp, other_stat, timing_table
 
 
 
@@ -656,7 +657,7 @@ def mmn_queueing_jsq_weibull(n,arrival_rate,scale,shape,simulation_time=60,simus
     }
     
     # Return the event calendar and all performance measures table
-    return event_calendar, utiliz, ans, aql, awt, act, no_cust_arr_comp, other_stat
+    return event_calendar, utiliz, ans, aql, awt, act, no_cust_arr_comp, other_stat, timing_table
 
 
 
@@ -929,7 +930,7 @@ def mmn_queueing_redundancy_dos(n,d,arrival_rate,service_rate,simulation_time=60
     }
     
     # Return the event calendar and all performance measures table
-    return event_calendar, utiliz, ans, aql, awt, act, no_cust_arr_comp, other_stat
+    return event_calendar, utiliz, ans, aql, awt, act, no_cust_arr_comp, other_stat, timing_table
 
 
 
@@ -1226,7 +1227,7 @@ def mmn_queueing_redundancy_doc(n,d,arrival_rate,service_rate,simulation_time=60
     }
     
     # Return the event calendar and all performance measures table
-    return event_calendar, utiliz, ans, aql, awt, act, no_cust_arr_comp, other_stat
+    return event_calendar, utiliz, ans, aql, awt, act, no_cust_arr_comp, other_stat, timing_table
 
 
 
@@ -1498,7 +1499,7 @@ def mmn_queueing_redundancy_dos_identical(n,d,arrival_rate,service_rate,simulati
     }
     
     # Return the event calendar and all performance measures table
-    return event_calendar, utiliz, ans, aql, awt, act, no_cust_arr_comp, other_stat
+    return event_calendar, utiliz, ans, aql, awt, act, no_cust_arr_comp, other_stat, timing_table
 
 
 
@@ -1796,7 +1797,7 @@ def mmn_queueing_redundancy_doc_identical(n,d,arrival_rate,service_rate,simulati
     }
     
     # Return the event calendar and all performance measures table
-    return event_calendar, utiliz, ans, aql, awt, act, no_cust_arr_comp, other_stat
+    return event_calendar, utiliz, ans, aql, awt, act, no_cust_arr_comp, other_stat, timing_table
 
 
 
@@ -2085,7 +2086,7 @@ def mmn_queueing_redundancy_dos_weibull(n,d,arrival_rate,scale,shape,simulation_
     }
     
     # Return the event calendar and all performance measures table
-    return event_calendar, utiliz, ans, aql, awt, act, no_cust_arr_comp, other_stat
+    return event_calendar, utiliz, ans, aql, awt, act, no_cust_arr_comp, other_stat, timing_table
 
 
 
@@ -2398,7 +2399,7 @@ def mmn_queueing_redundancy_doc_weibull(n,d,arrival_rate,scale,shape,simulation_
     }
     
     # Return the event calendar and all performance measures table
-    return event_calendar, utiliz, ans, aql, awt, act, no_cust_arr_comp, other_stat
+    return event_calendar, utiliz, ans, aql, awt, act, no_cust_arr_comp, other_stat, timing_table
 
 
 
@@ -2412,79 +2413,93 @@ def weibull_scale_calculator(desired_mean,shape):
 
 
 
-def system_compare_exp(system1,system2):
+def system_compare(system1,system2):
     '''
     Please input the outputs of the queueing function of the two systems.
     '''
-    #sys1_time = np.arange(0,system1[7]['simulation_time']+1,system1[7]['simulation_time']/20)
-    #sys2_time = np.arange(0,system2[7]['simulation_time']+1,system2[7]['simulation_time']/20)
-    
+
     if system1[7]['simulation_time'] != system2[7]['simulation_time']:
-        raise Exception("the two system should have same simulation time")
+        raise Exception("the two systems should have same simulation time")
 
     aaa = system1[0].iloc[np.where(system1[0]["Time"][1:].to_numpy() != system1[0]["Next Customer"][:-1].to_numpy())[0][:-1]+1,:]
     bbb = system2[0].iloc[np.where(system2[0]["Time"][1:].to_numpy() != system2[0]["Next Customer"][:-1].to_numpy())[0][:-1]+1,:]
-
+    plt.figure(1)
     plt.plot(aaa['Time'],aaa['Live_track'],label='system1')
     plt.plot(bbb['Time'],bbb['Live_track'],label='system2')
     plt.title('Comparison of the two systems')
     plt.xlabel('Time')
     plt.ylabel('# Customers')
     plt.legend()
+    
+    
+    sys1_timing = system1[8]
+    sys1_timing['act'] = sys1_timing['Finish'] - sys1_timing['Start']
+    sys2_timing = system2[8]
+    sys2_timing['act'] = sys2_timing['Finish'] - sys2_timing['Start']
+    sys1_timing['cma'] = sys1_timing['act'].expanding().mean()
+    sys2_timing['cma'] = sys2_timing['act'].expanding().mean()
 
-    sys1_data = np.array([])
-    for i in range(1,system1[7]['simulation_time']+1):
-        sys1_data=np.append(sys1_data,aaa[aaa['Time']<i].iloc[-1,-3])
-    sys2_data = np.array([])
-    for i in range(1,system2[7]['simulation_time']+1):
-        sys2_data=np.append(sys2_data,bbb[bbb['Time']<i].iloc[-1,-3])
-    diff = sys1_data - sys2_data
-    
-    result = np.array([sum(diff>0)/system1[7]['simulation_time'],\
-                       sum(diff==0)/system1[7]['simulation_time'],\
-                       sum(diff<0)/system1[7]['simulation_time']])
+    plt.figure(2)
+    plt.plot(aaa['Time'],sys1_timing['cma'],label='system1')
+    plt.plot(bbb['Time'],sys2_timing['cma'],label='system2')
+    plt.title('Comparison of the two systems')
+    plt.xlabel('Time')
+    plt.ylabel('ACT')
+    plt.legend()
 
-    # Forward order
-    if result[0] - result[2] > 0.75:
-        print("System 1 is significantly better than system 2")
-        print(f"System 1 is better on {result[0]*100}% of the time")
-        print(f"System 2 is better on {result[2]*100}% of the time")
-    elif 0.75 >= result[0] - result[2] > 0.55:
-        print("System 1 is substantially better than system 2")
-        print(f"System 1 is better on {result[0]*100}% of the time")
-        print(f"System 2 is better on {result[2]*100}% of the time")
-    elif 0.55 >= result[0] - result[2] > 0.35:
-        print("System 1 is moderately better than system 2")
-        print(f"System 1 is better on {result[0]*100}% of the time")
-        print(f"System 2 is better on {result[2]*100}% of the time")
-    elif 0.35 >= result[0] - result[2] > 0.15:
-        print("System 1 is slightly better than system 2")
-        print(f"System 1 is better on {result[0]*100}% of the time")
-        print(f"System 2 is better on {result[2]*100}% of the time")
+#     sys1_data = np.array([])
+#     for i in range(1,system1[7]['simulation_time']+1):
+#         sys1_data=np.append(sys1_data,aaa[aaa['Time']<i].iloc[-1,-3])
+#     sys2_data = np.array([])
+#     for i in range(1,system2[7]['simulation_time']+1):
+#         sys2_data=np.append(sys2_data,bbb[bbb['Time']<i].iloc[-1,-3])
+#     diff = sys1_data - sys2_data
     
-    # 5/5
-    elif 0.15 >= result[0] - result[2] > -0.15:
-        print("The 2 systems have almost the same performance")
-        print(f"System 1 is better on {result[0]*100}% of the time")
-        print(f"System 2 is better on {result[2]*100}% of the time")
+#     result = np.array([sum(diff>0)/system1[7]['simulation_time'],\
+#                        sum(diff==0)/system1[7]['simulation_time'],\
+#                        sum(diff<0)/system1[7]['simulation_time']])
+
+#     # Forward order
+#     if result[0] - result[2] > 0.75:
+#         print("System 1 is significantly better than system 2")
+#         print(f"System 1 is better on {result[0]*100}% of the time")
+#         print(f"System 2 is better on {result[2]*100}% of the time")
+#     elif 0.75 >= result[0] - result[2] > 0.55:
+#         print("System 1 is substantially better than system 2")
+#         print(f"System 1 is better on {result[0]*100}% of the time")
+#         print(f"System 2 is better on {result[2]*100}% of the time")
+#     elif 0.55 >= result[0] - result[2] > 0.35:
+#         print("System 1 is moderately better than system 2")
+#         print(f"System 1 is better on {result[0]*100}% of the time")
+#         print(f"System 2 is better on {result[2]*100}% of the time")
+#     elif 0.35 >= result[0] - result[2] > 0.15:
+#         print("System 1 is slightly better than system 2")
+#         print(f"System 1 is better on {result[0]*100}% of the time")
+#         print(f"System 2 is better on {result[2]*100}% of the time")
     
-    # reverse order
-    elif -0.15 >= result[0] - result[2] > -0.35:
-        print("System 2 is slightly better than system 1")
-        print(f"System 1 is better on {result[0]*100}% of the time")
-        print(f"System 2 is better on {result[2]} of the time")
-    elif -0.35 >= result[0] - result[2] > -0.55:
-        print("System 2 is moderately better than system 1")
-        print(f"System 1 is better on {result[0]*100}% of the time")
-        print(f"System 2 is better on {result[2]*100}% of the time")
-    elif -0.55 >= result[0] - result[2] > -0.75:
-        print("System 2 is substantially better than system 1")
-        print(f"System 1 is better on {result[0]*100}% of the time")
-        print(f"System 2 is better on {result[2]*100}% of the time")
-    elif -0.75 >= result[0] - result[2]:
-        print("System 2 is significantly better than system 1")
-        print(f"System 1 is better on {result[0]*100}% of the time")
-        print(f"System 2 is better on {result[2]*100}% of the time")
+#     # 5/5
+#     elif 0.15 >= result[0] - result[2] > -0.15:
+#         print("The 2 systems have almost the same performance")
+#         print(f"System 1 is better on {result[0]*100}% of the time")
+#         print(f"System 2 is better on {result[2]*100}% of the time")
+    
+#     # reverse order
+#     elif -0.15 >= result[0] - result[2] > -0.35:
+#         print("System 2 is slightly better than system 1")
+#         print(f"System 1 is better on {result[0]*100}% of the time")
+#         print(f"System 2 is better on {result[2]} of the time")
+#     elif -0.35 >= result[0] - result[2] > -0.55:
+#         print("System 2 is moderately better than system 1")
+#         print(f"System 1 is better on {result[0]*100}% of the time")
+#         print(f"System 2 is better on {result[2]*100}% of the time")
+#     elif -0.55 >= result[0] - result[2] > -0.75:
+#         print("System 2 is substantially better than system 1")
+#         print(f"System 1 is better on {result[0]*100}% of the time")
+#         print(f"System 2 is better on {result[2]*100}% of the time")
+#     elif -0.75 >= result[0] - result[2]:
+#         print("System 2 is significantly better than system 1")
+#         print(f"System 1 is better on {result[0]*100}% of the time")
+#         print(f"System 2 is better on {result[2]*100}% of the time")
 
 
 
